@@ -15,15 +15,96 @@ Performance score (0-100) is weighted:
 
 ## Core Web Vitals
 
-### LCP (Largest Contentful Paint)
+### LCP (Largest Contentful Paint) - Deep Dive
 - Target: < 2.5s
 - Measures: Largest content element render time
 
-**Optimization:**
-- Preload critical images
-- Remove render-blocking resources
-- Improve server response time (TTFB)
-- Use CDN
+**The `lcp-breakdown-insight` Audit Structure:**
+
+```javascript
+{
+  "id": "lcp-breakdown-insight",
+  "score": 0,                    // 0 = needs improvement
+  "scoreDisplayMode": "numeric",
+  "guidanceLevel": 3,            // Higher = more critical
+  "metricSavings": { "LCP": 0 },
+  "details": {
+    "type": "list",
+    "items": [
+      {
+        "type": "table",         // LCP timing breakdown
+        "items": [
+          {
+            "subpart": "timeToFirstByte",
+            "duration": 1418.637 // ms
+          },
+          {
+            "subpart": "resourceLoadDelay",
+            "duration": 0        // Can be 0 if no external resource
+          },
+          {
+            "subpart": "resourceLoadDuration",
+            "duration": 0        // Can be 0 if text-based LCP
+          },
+          {
+            "subpart": "elementRenderDelay",
+            "duration": 2645.782 // ms
+          }
+        ]
+      },
+      {
+        "type": "node",          // The LCP element
+        "selector": "div.relative > div.w-full > div.flex > h1.text-5xl",
+        "nodeLabel": "探索 AI 的 无限可能",
+        "boundingRect": { "top": 282, "left": 574, "width": 814, "height": 91 }
+      }
+    ]
+  }
+}
+```
+
+**LCP Subparts Explained:**
+
+| Subpart | What It Measures | Good | Needs Fix | Root Cause |
+|---------|------------------|------|-----------|------------|
+| `timeToFirstByte` | HTML response time | < 600ms | > 600ms | Server location, CDN, database queries |
+| `resourceLoadDelay` | Wait before resource loads | < 100ms | > 100ms | Missing preload hints, late discovery |
+| `resourceLoadDuration` | Resource download time | As fast as possible | > 500ms | Unoptimized images, slow fonts |
+| `elementRenderDelay` | JS/CSS blocking render | < 200ms | > 500ms | Long JS tasks, complex CSS, animations |
+
+**Diagnosis Example:**
+```
+timeToFirstByte: 1419ms    → Server-side bottleneck
+resourceLoadDelay: 0ms     → No external resource (text-based LCP)
+resourceLoadDuration: 0ms  → N/A (text-based LCP)
+elementRenderDelay: 2646ms → JS blocking render, animations, or hydrating
+```
+
+**Optimization by Subpart:**
+
+1. **High `timeToFirstByte`** (> 600ms):
+   - Enable CDN (Vercel, Cloudflare)
+   - Use serverless/edge functions
+   - Implement caching headers
+   - Optimize database queries
+
+2. **High `resourceLoadDelay`** (> 100ms):
+   ```html
+   <!-- Add preload hints -->
+   <link rel="preload" href="/hero-image.webp" as="image">
+   <link rel="preload" href="/font.woff2" as="font" crossorigin>
+   ```
+
+3. **High `resourceLoadDuration`** (> 500ms):
+   - Use WebP/AVIF images
+   - Compress images (sharp, imagemin)
+   - Subset fonts (fonttools)
+
+4. **High `elementRenderDelay`** (> 500ms):
+   - Defer non-critical JS
+   - Remove render-blocking CSS
+   - Reduce or delay animations
+   - Use CSS containment: `contain: layout paint`
 
 ### FID (First Input Delay)
 - Target: < 100ms

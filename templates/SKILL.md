@@ -68,10 +68,36 @@ When analyzing a Lighthouse report, this skill will:
 1. **Extract category scores** - Performance, Accessibility, SEO, Best Practices
 2. **Check Core Web Vitals** - LCP, FID, CLS, FCP, TBT against thresholds
 3. **Diagnose specific issues**:
-   - TTFB root cause analysis (server location, CDN, database, compression)
-   - Framework detection (Next.js chunks, React bundles)
-   - Speed Index analysis (critical CSS, resource prioritization)
-4. **Generate targeted fixes** - Prioritized by impact on Core Web Vitals
+   - **LCP breakdown analysis** - TTFB, resource load delay, resource load duration, element render delay
+   - **TTFB root cause analysis** - server location, CDN, database, compression
+   - **Framework detection** - Next.js chunks, React bundles
+   - **Speed Index analysis** - critical CSS, resource prioritization
+4. **Generate targeted fixes** - Prioritized by impact on Core Web Vitals with exact code locations
+
+### LCP Breakdown Deep Dive
+
+The `lcp-breakdown-insight` audit reveals exactly where LCP time is spent:
+
+| Subpart | What It Measures | Target | Optimization Focus |
+|---------|------------------|--------|-------------------|
+| `timeToFirstByte` | Time to receive first HTML byte | < 600ms | Server response, CDN, caching |
+| `resourceLoadDelay` | Time until LCP resource starts loading | Minimal | Preload, resource hints |
+| `resourceLoadDuration` | Time to load LCP resource | As fast as possible | Image optimization, compression |
+| `elementRenderDelay` | Time from resource loaded to element rendered | Minimal | Reduce JS blocking, CSS complexity |
+
+**Interpreting Results**:
+- If `timeToFirstByte` > 600ms: Server-side bottleneck
+- If `resourceLoadDelay` is high: Missing preload hints
+- If `resourceLoadDuration` is high: Optimize image/font size
+- If `elementRenderDelay` is high: Reduce blocking JavaScript or CSS
+
+**Example from real report**:
+```
+timeToFirstByte: 1419ms    → Server response too slow
+elementRenderDelay: 2646ms → JS blocking render
+```
+
+This indicates TTFB and render delay are the bottlenecks, not resource loading.
 
 ### For Performance Optimization
 

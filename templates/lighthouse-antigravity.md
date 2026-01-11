@@ -404,6 +404,7 @@ fi
 1. Read `.lighthouse/reports/latest.json`
 2. Extract category scores and Core Web Vitals
 3. Diagnose specific issues:
+   - **LCP breakdown analysis** - Identify which LCP phase is the bottleneck
    - Check TTFB (Time to First Byte) - target < 600ms
    - Identify framework-specific issues (Next.js chunks, etc.)
    - Analyze Speed Index for perceived performance
@@ -412,6 +413,37 @@ fi
 5. Prioritize by impact on Core Web Vitals
 
 ## Precise Issue Diagnostics
+
+### LCP Breakdown Deep Dive
+
+The `lcp-breakdown-insight` audit reveals exactly where LCP time is spent:
+
+| Subpart | What It Measures | Target | If High |
+|---------|------------------|--------|---------|
+| `timeToFirstByte` | HTML response time | < 600ms | Server response slow |
+| `resourceLoadDelay` | Wait until resource starts | < 100ms | Missing preload hints |
+| `resourceLoadDuration` | Resource download time | As fast as possible | Optimize image/font |
+| `elementRenderDelay` | Time to render element | < 200ms | JS/CSS blocking |
+
+**Example from real report:**
+```javascript
+// lhr.audits['lcp-breakdown-insight'].details.items[0].items
+[
+  { subpart: 'timeToFirstByte', duration: 1419 },      // High - server bottleneck
+  { subpart: 'resourceLoadDelay', duration: 0 },       // OK - no external resource
+  { subpart: 'resourceLoadDuration', duration: 0 },    // OK - text-based LCP
+  { subpart: 'elementRenderDelay', duration: 2646 }    // High - JS blocking
+]
+
+// lhr.audits['lcp-breakdown-insight'].details.items[1]
+{
+  type: 'node',
+  selector: 'div.relative > div.w-full > div.flex > h1.text-5xl',
+  nodeLabel: '探索 AI 的 无限可能'
+}
+```
+
+**Interpretation:** TTFB (1419ms) and element render delay (2646ms) are bottlenecks. The LCP element is an H1 heading with text "探索 AI 的 无限可能".
 
 ### Server Response Time (TTFB) Analysis
 

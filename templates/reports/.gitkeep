@@ -1,0 +1,35 @@
+# Lighthouse Reports Directory
+
+This directory stores Lighthouse JSON reports.
+
+## Naming Convention
+
+Reports should be named with timestamps:
+- `latest.json` - Symbolic link or copy of most recent report
+- `2025-01-11-143022.json` - Timestamped reports
+
+## Running Lighthouse
+
+```bash
+# Run against localhost
+lighthouse http://localhost:3000 --output json --output-path .lighthouse/reports/latest.json
+
+# Run against production
+lighthouse https://example.com --output json --output-path .lighthouse/reports/production-$(date +%Y%m%d-%H%M%S).json
+
+# Run with specific categories
+lighthouse https://example.com --only-categories=performance --output json --output-path .lighthouse/reports/perf.json
+```
+
+## Analyzing Reports
+
+```bash
+# Analyze latest report
+gl analyze
+
+# Generate fix suggestions
+gl fixes
+
+# Analyze specific report
+gl analyze .lighthouse/reports/2025-01-11-143022.json
+```

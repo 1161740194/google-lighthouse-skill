@@ -1,0 +1,46 @@
+{
+  "name": "@google-lighthouse-skill/cli",
+  "version": "1.0.0",
+  "description": "Google Lighthouse CLI tool - Analyze reports and generate optimizations for Claude Code and Antigravity IDEs",
+  "main": "index.js",
+  "bin": {
+    "gl": "./bin/gl.js"
+  },
+  "scripts": {
+    "test": "node test/test.js",
+    "lint": "eslint **/*.js"
+  },
+  "keywords": [
+    "lighthouse",
+    "performance",
+    "seo",
+    "accessibility",
+    "web-vitals",
+    "claude",
+    "antigravity",
+    "cli"
+  ],
+  "author": "Lighthouse Skill Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/google-lighthouse-skill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/google-lighthouse-skill/issues"
+  },
+  "homepage": "https://github.com/yourusername/google-lighthouse-skill#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "inquirer": "^8.2.5",
+    "ora": "^5.4.1",
+    "cli-table3": "^0.6.3"
+  },
+  "devDependencies": {
+    "eslint": "^8.55.0"
+  }
+}

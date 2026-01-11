@@ -1,0 +1,17 @@
+{
+  "name": "lighthouse",
+  "description": "Lighthouse performance, accessibility, SEO, and best practices audits for web optimization. Use for analyzing Lighthouse reports (JSON/HTML), understanding performance metrics, Core Web Vitals, and implementing optimization recommendations.",
+  "base_url": "https://developer.chrome.com/docs/lighthouse",
+  "selectors": {
+    "main_content": "article",
+    "title": "h1",
+    "code_blocks": "pre code"
+  },
+  "url_patterns": {
+    "include": [],
+    "exclude": []
+  },
+  "categories": {},
+  "rate_limit": 0.5,
+  "max_pages": 100
+}

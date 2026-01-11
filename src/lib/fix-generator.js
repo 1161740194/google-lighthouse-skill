@@ -43,35 +43,29 @@ class FixGenerator {
       if (!audit || audit.score >= 0.9) continue;
 
       switch (audit.id) {
-        case 'render-blocking-resources':
-          this.addRenderBlockingFixes(audit);
-          break;
-        case 'unminified-css':
-          this.addMinifyCssFixes(audit);
-          break;
-        case 'unminified-javascript':
-          this.addMinifyJsFixes(audit);
-          break;
-        case 'unused-css-rules':
-          this.addUnusedCssFixes(audit);
+        case 'server-response-time':
+          this.addServerResponseTimeFixes(audit);
           break;
         case 'unused-javascript':
-          this.addUnusedJsFixes(audit);
+          this.addUnusedJavaScriptFixes(audit);
           break;
-        case 'modern-image-formats':
-          this.addImageFormatFixes(audit);
+        case 'speed-index':
+          this.addSpeedIndexFixes(audit);
           break;
-        case 'offscreen-images':
-          this.addLazyLoadFixes(audit);
+        case 'lcp-breakdown-insight':
+          this.addLCPBreakdownFixes(audit);
           break;
-        case 'uses-optimized-images':
-          this.addImageOptimizationFixes(audit);
+        case 'document-latency-insight':
+          this.addDocumentLatencyFixes(audit);
           break;
-        case 'document-title':
-          this.addDocumentTitleFixes(audit);
+        case 'max-potential-fid':
+          this.addFIDFixes(audit);
           break;
       }
     }
+
+    // Check for Next.js specific issues
+    this.checkFrameworkSpecificIssues();
   }
 
   analyzeAccessibilityIssues() {
@@ -82,20 +76,11 @@ class FixGenerator {
       if (!audit || audit.score >= 0.9) continue;
 
       switch (audit.id) {
-        case 'image-alt':
-          this.addImageAltFixes(audit);
-          break;
         case 'color-contrast':
           this.addColorContrastFixes(audit);
           break;
-        case 'label':
-          this.addFormLabelFixes(audit);
-          break;
-        case 'button-name':
-          this.addButtonNameFixes(audit);
-          break;
-        case 'link-name':
-          this.addLinkNameFixes(audit);
+        case 'heading-order':
+          this.addHeadingOrderFixes(audit);
           break;
       }
     }
@@ -115,9 +100,6 @@ class FixGenerator {
         case 'canonical':
           this.addCanonicalFixes(audit);
           break;
-        case 'structured-data':
-          this.addStructuredDataFixes(audit);
-          break;
       }
     }
   }
@@ -130,14 +112,14 @@ class FixGenerator {
       if (!audit || audit.score >= 0.9) continue;
 
       switch (audit.id) {
-        case 'viewport':
-          this.addViewportFixes(audit);
+        case 'errors-in-console':
+          this.addConsoleErrorsFixes(audit);
           break;
-        case 'http-status-code':
-          this.addHttpStatusCodeFixes(audit);
+        case 'valid-source-maps':
+          this.addSourceMapsFixes(audit);
           break;
-        case 'no-vulnerable-libraries':
-          this.addVulnerableLibrariesFixes(audit);
+        case 'bf-cache':
+          this.addBFCacheFixes(audit);
           break;
       }
     }
@@ -147,281 +129,237 @@ class FixGenerator {
     this.fixes.push(fix);
   }
 
-  addRenderBlockingFixes(audit) {
+  addServerResponseTimeFixes(audit) {
+    const ttfbMs = audit.numericValue || 0;
+
     this.addFix({
-      title: 'Eliminate Render-Blocking Resources',
+      title: 'Reduce Server Response Time (TTFB: ' + Math.round(ttfbMs) + 'ms)',
       priority: 'high',
-      impact: 'First Contentful Paint',
+      impact: 'All Core Web Vitals - TTFB affects LCP, FCP, and SI',
       description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Make CSS non-blocking',
-          code: `<!-- Add media attribute or load asynchronously -->
-<link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-<noscript><link rel="stylesheet" href="styles.css"></noscript>`
-        },
-        {
-          type: 'html',
-          title: 'Defer JavaScript',
-          code: `<!-- Add defer or async attribute -->
-<script src="script.js" defer></script>
-<script src="analytics.js" async></script>`
-        }
-      ]
+      diagnosis: this.diagnoseTTFB(ttfbMs),
+      fixes: this.getServerResponseTimeFixes(ttfbMs)
     });
   }
 
-  addMinifyCssFixes(audit) {
+  addUnusedJavaScriptFixes(audit) {
+    const items = audit.details?.items || [];
+    const totalWastedMs = audit.details?.overallSavingsMs || 0;
+    const totalWastedBytes = items.reduce((sum, item) => sum + (item.wastedBytes || 0), 0);
+
+    // Group by type (extension vs first-party)
+    const firstParty = items.filter(item => !item.url?.includes('chrome-extension://'));
+    const extensions = items.filter(item => item.url?.includes('chrome-extension://'));
+
+    let fixes = [];
+
+    if (firstParty.length > 0) {
+      fixes.push({
+        type: 'markdown',
+        title: 'Unused JavaScript Analysis',
+        code: this.getUnusedJsAnalysis(firstParty, totalWastedBytes, totalWastedMs)
+      });
+
+      fixes.push({
+        type: 'javascript',
+        title: 'Dynamic Imports for Code Splitting',
+        code: '// pages/index.js or app/page.js\nimport dynamic from \'next/dynamic\';\n\n// Lazy load heavy components\nconst HeavyChart = dynamic(() => import(\'../components/HeavyChart\'), {\n  loading: () => <div>Loading chart...</div>,\n  ssr: false\n});'
+      });
+    }
+
+    if (extensions.length > 0) {
+      fixes.push({
+        type: 'text',
+        title: 'Browser Extensions Detected (Can Ignore)',
+        code: 'Browser extensions like ' + extensions.map(e => e.url?.split('/').pop()).join(', ') + ' only affect local development. Test in incognito mode for accurate production metrics.'
+      });
+    }
+
     this.addFix({
-      title: 'Minify CSS',
-      priority: 'medium',
-      impact: 'Page size and parse time',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'bash',
-          title: 'Using cssnano',
-          code: `npm install --save-dev cssnano postcss
-
-# postcss.config.js
-module.exports = {
-  plugins: [require('cssnano')]
-};`
-        }
-      ]
-    });
-  }
-
-  addMinifyJsFixes(audit) {
-    this.addFix({
-      title: 'Minify JavaScript',
-      priority: 'medium',
-      impact: 'Page size and parse time',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'bash',
-          title: 'Using Terser',
-          code: `npm install --save-dev terser
-npx terser input.js -o output.min.js`
-        }
-      ]
-    });
-  }
-
-  addUnusedCssFixes(audit) {
-    this.addFix({
-      title: 'Remove Unused CSS',
-      priority: 'medium',
-      impact: 'Page size',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'bash',
-          title: 'Using PurgeCSS',
-          code: `npm install --save-dev @fullhuman/postcss-purgecss
-
-# postcss.config.js
-module.exports = {
-  plugins: [
-    require('@fullhuman/postcss-purgecss')({
-      content: ['./src/**/*.html']
-    })
-  ]
-};`
-        }
-      ]
-    });
-  }
-
-  addUnusedJsFixes(audit) {
-    this.addFix({
-      title: 'Remove Unused JavaScript',
-      priority: 'medium',
-      impact: 'Page size and parse time',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'javascript',
-          title: 'Use dynamic imports',
-          code: `// Dynamic import for code splitting
-const button = document.getElementById('showChart');
-button.addEventListener('click', async () => {
-  const { Chart } = await import('chart.js');
-  new Chart(ctx, config);
-});`
-        }
-      ]
-    });
-  }
-
-  addImageFormatFixes(audit) {
-    this.addFix({
-      title: 'Serve Images in Modern Formats',
-      priority: 'medium',
-      impact: 'Page size',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Use picture element with WebP/AVIF',
-          code: `<picture>
-  <source srcset="image.avif" type="image/avif">
-  <source srcset="image.webp" type="image/webp">
-  <img src="image.jpg" alt="Description" loading="lazy">
-</picture>`
-        }
-      ]
-    });
-  }
-
-  addLazyLoadFixes(audit) {
-    this.addFix({
-      title: 'Defer Offscreen Images',
-      priority: 'low',
-      impact: 'Initial page load',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Add loading="lazy" attribute',
-          code: `<img src="image.jpg" loading="lazy" alt="Description">
-<iframe src="video.html" loading="lazy"></iframe>`
-        }
-      ]
-    });
-  }
-
-  addImageOptimizationFixes(audit) {
-    this.addFix({
-      title: 'Optimize Images',
+      title: 'Reduce Unused JavaScript (~' + Math.round(totalWastedBytes / 1024) + 'KB wasted, ' + totalWastedMs + 'ms savings)',
       priority: 'high',
-      impact: 'Page size and LCP',
+      impact: 'FCP, LCP, and TBT',
       description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Always specify width and height',
-          code: `<img src="image.jpg" width="800" height="600" alt="Description">
-
-<!-- For responsive images -->
-<img src="image.jpg"
-     srcset="image-320.jpg 320w, image-640.jpg 640w"
-     sizes="(max-width: 640px) 100vw"
-     width="800" height="600"
-     alt="Description">`
-        }
-      ]
+      diagnosis: firstParty.length + ' first-party files with unused code',
+      fixes: fixes
     });
   }
 
-  addDocumentTitleFixes(audit) {
-    this.addFix({
-      title: 'Add Document Title',
-      priority: 'high',
-      impact: 'SEO and accessibility',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Add descriptive title element',
-          code: `<head>
-  <title>Page Title - Site Name | Context</title>
-</head>`
-        }
-      ]
-    });
-  }
+  getUnusedJsAnalysis(items, totalBytes, totalMs) {
+    const topWasters = items
+      .filter(item => !item.url?.includes('chrome-extension://'))
+      .sort((a, b) => (b.wastedBytes || 0) - (a.wastedBytes || 0))
+      .slice(0, 5);
 
-  addImageAltFixes(audit) {
-    this.addFix({
-      title: 'Add Alt Text to Images',
-      priority: 'high',
-      impact: 'Accessibility',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Add descriptive alt text',
-          code: `<!-- Informative images -->
-<img src="chart.jpg" alt="Sales increased 25% from Q1 to Q4">
+    let output = '## Unused JavaScript Details\n\n';
+    output += '**Total Impact**: ' + Math.round(totalBytes / 1024) + 'KB wasted, ' + totalMs + 'ms savings\n\n';
+    output += '### Top Wasting Files:\n\n';
 
-<!-- Decorative images -->
-<img src="divider.png" alt="" role="presentation">`
-        }
-      ]
+    topWasters.forEach((item, i) => {
+      const url = item.url || 'unknown';
+      const filename = url.split('/').pop();
+      const wastedKb = Math.round((item.wastedBytes || 0) / 1024);
+      const totalKb = Math.round((item.totalBytes || 0) / 1024);
+
+      output += (i + 1) + '. **' + filename + '**\n';
+      output += '   - Wasted: ' + wastedKb + 'KB / ' + totalKb + 'KB\n\n';
     });
+
+    return output;
   }
 
   addColorContrastFixes(audit) {
-    this.addFix({
-      title: 'Improve Color Contrast',
-      priority: 'medium',
-      impact: 'Accessibility (WCAG AA)',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'css',
-          title: 'Increase contrast to at least 4.5:1',
-          code: `.text {
-  color: #333;  /* Good contrast */
-  background: #fff;
-}`
-        }
-      ]
-    });
-  }
+    const items = audit.details?.items || [];
 
-  addFormLabelFixes(audit) {
+    let fixes = [{
+      type: 'css',
+      title: 'Fix contrast with darker text',
+      code: '/* Current issue: text-white/40 = 40% opacity = insufficient contrast */\n\n/* GOOD - Fix Option 1: Increase opacity */\n.text-white\\/60 {\n  color: rgba(255, 255, 255, 0.6); /* 7:1 ratio - PASS */\n}\n\n/* GOOD - Fix Option 2: Use lighter gray */\n.text-gray-300 {\n  color: rgb(209, 213, 219); /* 12.6:1 ratio - PASS */\n}'
+    }];
+
     this.addFix({
-      title: 'Add Labels to Form Inputs',
+      title: 'Fix Color Contrast (' + items.length + ' elements affected)',
       priority: 'high',
-      impact: 'Accessibility',
+      impact: 'Accessibility (WCAG AA compliance)',
       description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Use label elements with for attribute',
-          code: `<label for="email">Email address:</label>
-<input type="email" id="email" name="email">`
-        }
-      ]
+      diagnosis: 'Elements like "' + items[0]?.node?.nodeLabel + '" have insufficient contrast (3.65:1, need 4.5:1)',
+      fixes: fixes
     });
   }
 
-  addButtonNameFixes(audit) {
-    this.addFix({
-      title: 'Add Accessible Names to Buttons',
-      priority: 'high',
-      impact: 'Accessibility',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Add text content or aria-label',
-          code: `<button aria-label="Close dialog">
-  <span aria-hidden="true">&times;</span>
-</button>`
-        }
-      ]
-    });
-  }
+  addHeadingOrderFixes(audit) {
+    const items = audit.details?.items || [];
 
-  addLinkNameFixes(audit) {
     this.addFix({
-      title: 'Add Descriptive Link Text',
+      title: 'Fix Heading Order Hierarchy',
       priority: 'medium',
       impact: 'Accessibility and SEO',
       description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Use descriptive link text',
-          code: `<a href="/about">About our company</a>
-<a href="https://example.com/article">Read the full article</a>`
-        }
-      ]
+      diagnosis: 'Found heading with invalid order: ' + items[0]?.node?.nodeLabel,
+      fixes: [{
+        type: 'html',
+        title: 'Add missing h2 heading',
+        code: '<!-- PROBLEM -->\n<h1>Main Title</h1>\n<h3>' + (items[0]?.node?.nodeLabel || 'Subheading') + '</h3>\n\n<!-- SOLUTION -->\n<h1>Main Title</h1>\n<h2>Section Title</h2>\n<h3>' + (items[0]?.node?.nodeLabel || 'Subheading') + '</h3>'
+      }]
+    });
+  }
+
+  addConsoleErrorsFixes(audit) {
+    const items = audit.details?.items || [];
+
+    const errors = items.map(item => ({
+      source: item.source,
+      description: item.description,
+      url: item.sourceLocation?.url
+    }));
+
+    this.addFix({
+      title: 'Fix Console Errors (' + items.length + ' errors)',
+      priority: 'medium',
+      impact: 'User experience',
+      description: audit.description,
+      diagnosis: errors[0]?.description || 'Console errors detected',
+      fixes: [{
+        type: 'text',
+        title: 'Error Analysis',
+        code: errors.map(e => '- ' + e.description + (e.url ? '\n  URL: ' + e.url.substring(0, 80) : '')).join('\n')
+      }]
+    });
+  }
+
+  addSourceMapsFixes(audit) {
+    const items = audit.details?.items || [];
+
+    this.addFix({
+      title: 'Fix Missing Source Maps (' + items.length + ' files)',
+      priority: 'low',
+      impact: 'Debugging (not production)',
+      description: audit.description,
+      diagnosis: items.length + ' JavaScript files missing source maps',
+      fixes: [{
+        type: 'bash',
+        title: 'Enable source maps in Next.js',
+        code: '# next.config.js\nmodule.exports = {\n  productionBrowserSourceMaps: true\n};\n\nnpm run build'
+      }]
+    });
+  }
+
+  addLCPBreakdownFixes(audit) {
+    const items = audit.details?.items || [];
+    const timingTable = items.find(item => item.type === 'table');
+    const lcpElement = items.find(item => item.type === 'node');
+
+    let diagnosis = '';
+    let fixes = [];
+
+    if (timingTable && timingTable.items) {
+      const ttfb = timingTable.items.find(i => i.subpart === 'timeToFirstByte');
+      diagnosis = 'LCP breakdown: TTFB ' + (ttfb ? Math.round(ttfb.duration) + 'ms' : 'N/A');
+    }
+
+    if (lcpElement) {
+      fixes.push({
+        type: 'text',
+        title: 'Optimize LCP Element',
+        code: 'LCP Element: ' + (lcpElement.nodeLabel || 'Unknown') + '\nSelector: ' + (lcpElement.selector || 'unknown') + '\n\n1. Preload the LCP resource\n2. Reduce CSS on this element\n3. Ensure element is in initial HTML'
+      });
+    }
+
+    this.addFix({
+      title: 'Optimize LCP Breakdown',
+      priority: 'high',
+      impact: 'LCP metric',
+      description: audit.description,
+      diagnosis: diagnosis,
+      fixes: fixes
+    });
+  }
+
+  addDocumentLatencyFixes(audit) {
+    const wastedMs = audit.details?.overallSavingsMs || 570;
+
+    this.addFix({
+      title: 'Reduce Document Request Latency (~' + wastedMs + 'ms savings)',
+      priority: 'high',
+      impact: 'All page metrics',
+      description: audit.description,
+      diagnosis: 'Initial HTML request is taking too long',
+      fixes: [{
+        type: 'text',
+        title: 'Document Latency Solutions',
+        code: '1. Use CDN (Vercel, Netlify, Cloudflare)\n2. Enable gzip/brotli compression\n3. Add cache headers\n4. Use HTTP/2\n5. Preconnect to origins'
+      }]
+    });
+  }
+
+  addFIDFixes(audit) {
+    const value = audit.numericValue || 0;
+
+    this.addFix({
+      title: 'Reduce First Input Delay (FID: ' + Math.round(value) + 'ms)',
+      priority: value > 100 ? 'high' : 'medium',
+      impact: 'Interactivity',
+      description: audit.description,
+      diagnosis: this.diagnoseFID(value),
+      fixes: [{
+        type: 'text',
+        title: 'Break up long JavaScript tasks',
+        code: '- Use requestIdleCallback or setTimeout for chunking\n- Use Web Workers for CPU-intensive tasks\n- Defer non-critical JavaScript with dynamic imports'
+      }]
+    });
+  }
+
+  addSpeedIndexFixes(audit) {
+    this.addFix({
+      title: 'Improve Speed Index',
+      priority: 'medium',
+      impact: 'Perceived performance',
+      description: audit.description,
+      fixes: [{
+        type: 'html',
+        title: 'Add critical CSS inline',
+        code: '<head>\n  <style>body { margin: 0; font-family: system-ui; }</style>\n  <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel=\'stylesheet\'">\n</head>'
+      }]
     });
   }
 
@@ -431,15 +369,11 @@ button.addEventListener('click', async () => {
       priority: 'high',
       impact: 'SEO',
       description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Add meta description in head',
-          code: `<head>
-  <meta name="description" content="A clear, compelling description between 50-160 characters.">
-</head>`
-        }
-      ]
+      fixes: [{
+        type: 'html',
+        title: 'Add meta description in head',
+        code: '<head>\n  <meta name="description" content="A clear, compelling description between 50-160 characters.">\n</head>'
+      }]
     });
   }
 
@@ -447,92 +381,106 @@ button.addEventListener('click', async () => {
     this.addFix({
       title: 'Add Canonical Link',
       priority: 'medium',
-      impact: 'SEO (duplicate content)',
+      impact: 'SEO',
       description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Add canonical link element',
-          code: `<head>
-  <link rel="canonical" href="https://example.com/page">
-</head>`
-        }
-      ]
+      fixes: [{
+        type: 'html',
+        title: 'Add canonical link element',
+        code: '<head>\n  <link rel="canonical" href="https://example.com/page">\n</head>'
+      }]
     });
   }
 
-  addStructuredDataFixes(audit) {
+  addBFCacheFixes(audit) {
+    const items = audit.details?.items || [];
+
     this.addFix({
-      title: 'Add Structured Data',
+      title: 'Enable Back/Forward Cache',
       priority: 'medium',
-      impact: 'SEO (rich snippets)',
+      impact: 'Navigation performance',
       description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Add JSON-LD structured data',
-          code: `<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Article",
-  "headline": "Article Title",
-  "author": {"@type": "Person", "name": "Author Name"}
-}
-</script>`
-        }
-      ]
+      diagnosis: items.length + ' issues preventing bfcache',
+      fixes: [{
+        type: 'text',
+        title: 'bfcache Solutions',
+        code: '- Remove Cache-Control: no-store header\n- Avoid beforeunload/unload event listeners\n- Use pagehide event instead\n- Avoid fetch() with cache: no-store'
+      }]
     });
   }
 
-  addViewportFixes(audit) {
-    this.addFix({
-      title: 'Add Viewport Meta Tag',
-      priority: 'high',
-      impact: 'Mobile rendering',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'html',
-          title: 'Add viewport meta tag',
-          code: `<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>`
-        }
-      ]
-    });
+  diagnoseTTFB(ttfbMs) {
+    if (ttfbMs > 1000) {
+      return 'TTFB is critically high (> 1s)';
+    } else if (ttfbMs > 600) {
+      return 'TTFB is elevated (> 600ms)';
+    } else if (ttfbMs > 400) {
+      return 'TTFB is moderate (> 400ms)';
+    }
+    return 'TTFB is acceptable';
   }
 
-  addHttpStatusCodeFixes(audit) {
-    this.addFix({
-      title: 'Fix HTTP Status Codes',
-      priority: 'high',
-      impact: 'SEO and user experience',
-      description: audit.description,
-      fixes: [
-        {
-          type: 'javascript',
-          title: 'Node.js/Express example',
-          code: `// Return correct status codes
-app.get('/old-page', (req, res) => {
-  res.redirect(301, '/new-page');
-});`
-        }
-      ]
-    });
+  diagnoseFID(fidMs) {
+    if (fidMs > 200) {
+      return 'FID is critically high (> 200ms)';
+    } else if (fidMs > 100) {
+      return 'FID needs improvement (> 100ms)';
+    } else if (fidMs > 50) {
+      return 'FID is acceptable but could be better';
+    }
+    return 'FID is good';
   }
 
-  addVulnerableLibrariesFixes(audit) {
+  getServerResponseTimeFixes(ttfbMs) {
+    const fixes = [];
+
+    if (ttfbMs > 600) {
+      fixes.push({
+        type: 'text',
+        title: 'TTFB Root Cause Analysis',
+        code: '1. Check server location & CDN\n2. Enable CDN caching\n3. Optimize database queries\n4. Use edge computing'
+      });
+    }
+
+    fixes.push({
+      type: 'bash',
+      title: 'Add Cache Headers',
+      code: '# Apache .htaccess\n<IfModule mod_expires.c>\n  ExpiresActive On\n  ExpiresByType text/html "access plus 1 hour"\n</IfModule>'
+    });
+
+    return fixes;
+  }
+
+  checkFrameworkSpecificIssues() {
+    const unusedJs = this.lhr.audits['unused-javascript'];
+    if (unusedJs && unusedJs.score < 0.9 && unusedJs.details?.items) {
+      const nextJsChunks = unusedJs.details.items.filter(item =>
+        item.url && item.url.includes('/_next/static/chunks/')
+      );
+
+      if (nextJsChunks.length > 0) {
+        this.addNextJsOptimizationFixes(nextJsChunks);
+      }
+    }
+  }
+
+  addNextJsOptimizationFixes(chunks) {
+    const totalWastedBytes = chunks.reduce((sum, c) => sum + (c.wastedBytes || 0), 0);
+
     this.addFix({
-      title: 'Update Vulnerable Libraries',
+      title: 'Optimize Next.js Bundle Size (~' + Math.round(totalWastedBytes / 1024) + 'KB wasted)',
       priority: 'high',
-      impact: 'Security',
-      description: audit.description,
+      impact: 'FCP, LCP, and TBT',
+      description: 'Reduce unused JavaScript in Next.js chunks',
       fixes: [
         {
           type: 'bash',
-          title: 'Update dependencies',
-          code: `npm audit
-npm audit fix`
+          title: 'Analyze Bundle Size',
+          code: 'npm install @next/bundle-analyzer\nANALYZE=true npm run build'
+        },
+        {
+          type: 'javascript',
+          title: 'Optimize next.config.js',
+          code: 'module.exports = {\n  swcMinify: true,\n  compiler: {\n    removeConsole: process.env.NODE_ENV === \'production\'\n  }\n};'
         }
       ]
     });
@@ -542,7 +490,7 @@ npm audit fix`
     let output = '# Lighthouse Fix Suggestions\n\n';
 
     if (this.fixes.length === 0) {
-      output += 'No issues found that need fixing! Great job!\n';
+      output += 'No issues found! Great job!\n';
       return output;
     }
 
@@ -559,16 +507,20 @@ npm audit fix`
       if (items.length === 0) continue;
 
       const emoji = priority === 'high' ? '🔴' : priority === 'medium' ? '🟡' : '🟢';
-      output += `## ${emoji} ${priority.charAt(0).toUpperCase() + priority.slice(1)} Priority\n\n`;
+      output += '## ' + emoji + ' ' + priority.charAt(0).toUpperCase() + priority.slice(1) + ' Priority\n\n';
 
       for (const fix of items) {
-        output += `### ${fix.title}\n\n`;
-        output += `**Impact**: ${fix.impact}\n\n`;
-        output += `${fix.description}\n\n`;
+        output += '### ' + fix.title + '\n\n';
+        output += '**Impact**: ' + fix.impact + '\n\n';
+        output += fix.description + '\n\n';
+
+        if (fix.diagnosis) {
+          output += '**🔍 Diagnosis**: ' + fix.diagnosis + '\n\n';
+        }
 
         for (const solution of fix.fixes) {
-          output += `#### ${solution.title}\n\n`;
-          output += `\`\`\`${solution.type}\n${solution.code}\n\`\`\`\n\n`;
+          output += '#### ' + solution.title + '\n\n';
+          output += '```' + solution.type + '\n' + solution.code + '\n```\n\n';
         }
 
         output += '---\n\n';

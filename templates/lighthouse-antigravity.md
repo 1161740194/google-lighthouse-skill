@@ -402,11 +402,86 @@ fi
 ## Analysis Flow
 
 1. Read `.lighthouse/reports/latest.json`
-2. Extract category scores
-3. Check Core Web Vitals
-4. Identify opportunities (sorted by impact)
-5. List failed audits
-6. Generate code suggestions
+2. Extract category scores and Core Web Vitals
+3. Diagnose specific issues:
+   - Check TTFB (Time to First Byte) - target < 600ms
+   - Identify framework-specific issues (Next.js chunks, etc.)
+   - Analyze Speed Index for perceived performance
+   - Check for unused JavaScript with specific URLs
+4. Generate targeted code suggestions
+5. Prioritize by impact on Core Web Vitals
+
+## Precise Issue Diagnostics
+
+### Server Response Time (TTFB) Analysis
+
+When TTFB is high (> 600ms), analyze these areas:
+
+**1. Check Backend Performance**
+```bash
+# Test raw server response
+curl -o /dev/null -s -w "TTFB: %{time_starttransfer}s\n" https://your-site.com
+
+# Test from different locations
+# Use tools like: webpagetest.org, pingdom, GTmetrix
+```
+
+**2. Identify Framework-Specific Issues**
+- **Next.js**: Check if using `getServerSideProps` for cacheable content
+- **React**: Consider SSR vs SSG trade-offs
+- **API Routes**: Add response caching headers
+
+**3. CDN Configuration**
+```javascript
+// Next.js: Enable Image Optimization CDN
+// next.config.js
+module.exports = {
+  images: {
+    domains: ['cdn.example.com'],
+    loader: 'cloudinary', // or 'akamai', 'imgix'
+  }
+};
+```
+
+### Next.js Bundle Optimization
+
+Detect Next.js chunks in unused JavaScript:
+
+```javascript
+// Check report for: /_next/static/chunks/
+// Look for high wasted percentages (>50%)
+
+// Use dynamic imports for heavy components
+import dynamic from 'next/dynamic');
+
+const HeavyComponent = dynamic(() => import('./HeavyComponent'), {
+  loading: () => <div>Loading...</div>,
+  ssr: false
+});
+```
+
+### Speed Index Optimization
+
+Speed Index measures visual completeness. To improve:
+
+**1. Inline Critical CSS**
+```html
+<head>
+  <style>
+    /* Critical above-the-fold styles */
+    .hero { display: flex; min-height: 100vh; }
+    .title { font-size: 2rem; font-weight: bold; }
+  </style>
+  <link rel="preload" href="styles.css" as="style" onload="this.rel='stylesheet'">
+</head>
+```
+
+**2. Preload Critical Resources**
+```html
+<link rel="preload" href="/hero-image.webp" as="image">
+<link rel="preload" href="/fonts/main.woff2" as="font" crossorigin>
+<link rel="preconnect" href="https://api.example.com">
+```
 
 ## Common Code Fix Patterns
 
